@@ -1,0 +1,92 @@
+{{ define "index.html" }}
+<html>
+  <head>
+    <title>Speedtest Exporter</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        line-height: 1.6;
+        max-width: 800px;
+        margin: 40px auto;
+        padding: 0 20px;
+        color: #333;
+      }
+      h1 {
+        border-bottom: 2px solid #eee;
+        padding-bottom: 10px;
+        margin-bottom: 20px;
+      }
+      .info-box {
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 4px;
+        padding: 15px;
+        margin: 15px 0;
+      }
+      .warning {
+        background: #fff3cd;
+        border-color: #ffeeba;
+        color: #856404;
+      }
+      a {
+        color: #007bff;
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      .footer {
+        margin-top: 40px;
+        padding-top: 20px;
+        border-top: 1px solid #eee;
+        font-size: 0.9em;
+        color: #666;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Speedtest Exporter</h1>
+
+    <div class="info-box">
+      <strong>Version:</strong> {{.Version}}<br />
+      <strong>Commit:</strong> {{.Commit}}<br />
+      <strong>Server Port:</strong> {{.Port}}<br />
+      <strong>Update Interval:</strong> {{.UpdateInterval}} minutes<br />
+      <strong>Test Servers:</strong> {{if eq .ServerIDs "0"}}Auto-selected
+      closest server{{else if .ServerIDs}}{{.ServerIDs}}{{else}}Auto-selected
+      closest server{{end}}
+    </div>
+
+    <div class="info-box warning">
+      <strong>Important:</strong> The metrics endpoint performs a complete
+      network speed test on each scrape, which includes latency, download, and
+      upload tests. This operation takes around 30-40 seconds to complete.
+      Please adjust your scrape interval accordingly.
+    </div>
+
+    <div class="info-box">
+      <strong>Available Endpoints:</strong><br />
+      • <a href="/metrics">Metrics</a> - Prometheus metrics endpoint<br />
+      • <a href="/health">Health</a> - Health check endpoint
+    </div>
+
+    <div class="info-box">
+      <strong>Metrics Information:</strong><br />
+      • speedtest_download_bits_per_second - Download speed in bits per
+      second<br />
+      • speedtest_upload_bits_per_second - Upload speed in bits per second<br />
+      • speedtest_latency - Latency in milliseconds<br />
+      • speedtest_jitter - Jitter in milliseconds
+    </div>
+
+    <div class="footer">
+      <a href="https://github.com/kutovoys/speedtest-exporter" target="_blank"
+        >GitHub Repository</a
+      >
+      | Made with ❤️ by
+      <a href="https://github.com/kutovoys" target="_blank">kutovoys</a>
+    </div>
+  </body>
+</html>
+{{ end }}
