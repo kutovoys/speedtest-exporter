@@ -46,10 +46,9 @@ func main() {
 
 	reg := prometheus.NewRegistry()
 
-	reg.MustRegister(metrics.DownloadSpeed)
-	reg.MustRegister(metrics.UploadSpeed)
-	reg.MustRegister(metrics.Latency)
-	reg.MustRegister(metrics.Jitter)
+	for _, metric := range metrics.GetMetrics() {
+		reg.MustRegister(metric)
+	}
 
 	s := gocron.NewScheduler(time.UTC)
 

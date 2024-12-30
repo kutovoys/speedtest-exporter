@@ -63,11 +63,7 @@ func RunPingTest(server *speedtest.Server) error {
 	log.Printf("Starting ping test for server %s", server.Name)
 	server.PingTest(nil)
 
-	labels := prometheus.Labels{
-		"server_id":      server.ID,
-		"server_name":    server.Name,
-		"server_sponsor": server.Sponsor,
-	}
+	labels := getLabels(server, config.CLIConfig.Instance)
 
 	latencyMs := float64(server.Latency.Milliseconds())
 	metrics.Latency.With(labels).Set(latencyMs)

@@ -6,6 +6,7 @@ import (
 	"io"
 )
 
+//go:embed templates/*.html
 var content embed.FS
 
 var indexTmpl *template.Template
