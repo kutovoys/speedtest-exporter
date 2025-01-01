@@ -1,10 +1,9 @@
-// metrics.go
 package metrics
 
 import "github.com/prometheus/client_golang/prometheus"
 
 var (
-	labelNames = []string{"server_id", "server_name", "server_sponsor"}
+	labelNames = []string{"server_id", "server_name", "server_sponsor", "server_distance"}
 	metrics    []*prometheus.GaugeVec
 )
 
@@ -45,11 +44,20 @@ func UpdateLabelNames(instance string) {
 		labelNames,
 	)
 
+	TestDuration = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "speedtest_test_duration",
+			Help: "Test duration in seconds",
+		},
+		labelNames,
+	)
+
 	metrics = []*prometheus.GaugeVec{
 		DownloadSpeed,
 		UploadSpeed,
 		Latency,
 		Jitter,
+		TestDuration,
 	}
 }
 
@@ -58,6 +66,7 @@ var (
 	UploadSpeed   *prometheus.GaugeVec
 	Latency       *prometheus.GaugeVec
 	Jitter        *prometheus.GaugeVec
+	TestDuration  *prometheus.GaugeVec
 )
 
 func GetMetrics() []*prometheus.GaugeVec {

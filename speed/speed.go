@@ -1,12 +1,15 @@
 package speed
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"runtime"
+	"runtime/debug"
 	"speedtest-exporter/config"
 	"speedtest-exporter/metrics"
+	"speedtest-exporter/models"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -14,102 +17,117 @@ import (
 )
 
 func RunTests(serverIDs []string) error {
-	var servers []*speedtest.Server
+	defer func() {
+		runtime.GC()
+		debug.FreeOSMemory()
+	}()
 
-	if len(serverIDs) == 0 || serverIDs[0] == "0" {
-		serverList, err := speedtest.FetchServers()
-		if err != nil {
-			return fmt.Errorf("failed to fetch server list: %v", err)
-		}
-		servers = append(servers, serverList[0])
-	} else {
-		for _, id := range serverIDs {
-			id = strings.TrimSpace(id)
-			if id == "" {
-				continue
-			}
-			server, err := speedtest.FetchServerByID(id)
-			if err != nil {
-				log.Printf("Failed to fetch server with ID %s: %v", id, err)
-				continue
-			}
-			servers = append(servers, server)
-		}
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
 
-	var wg sync.WaitGroup
-	for _, server := range servers {
-		wg.Add(1)
-		go func(srv *speedtest.Server) {
-			defer wg.Done()
-			if err := RunPingTest(srv); err != nil {
-				log.Printf("Ping test failed for server %s: %v", srv.Name, err)
-			}
-		}(server)
-	}
-	wg.Wait()
+	for _, id := range serverIDs {
+		id = strings.TrimSpace(id)
+		serverCtx, serverCancel := context.WithTimeout(ctx, 2*time.Minute)
 
-	for _, server := range servers {
-		if err := RunSpeedTest(server); err != nil {
-			log.Printf("Speed test failed for server %s: %v", server.Name, err)
+		if err := runAllTests(serverCtx, id); err != nil {
+			log.Printf("Tests failed for server ID %s: %v", id, err)
 		}
+
+		serverCancel()
+		runtime.GC()
+		debug.FreeOSMemory()
 		time.Sleep(5 * time.Second)
 	}
 
 	return nil
 }
 
-func RunPingTest(server *speedtest.Server) error {
-	log.Printf("Starting ping test for server %s", server.Name)
-	server.PingTest(nil)
+func runAllTests(ctx context.Context, serverID string) error {
+	client := speedtest.New()
+	defer func() {
+		if manager := client.Manager; manager != nil {
+			manager.Reset()
+			if snapshots := manager.Snapshots(); snapshots != nil {
+				snapshots.Clean()
+			}
+			manager.Wait()
+		}
+	}()
 
-	labels := getLabels(server, config.CLIConfig.Instance)
+	var server *speedtest.Server
+	var err error
 
-	latencyMs := float64(server.Latency.Milliseconds())
-	metrics.Latency.With(labels).Set(latencyMs)
-	log.Printf("Latency measured for server %s: %.2f ms", server.Name, latencyMs)
-
-	if server.Jitter > 0 {
-		jitterMs := float64(server.Jitter.Microseconds()) / 1000.0
-		metrics.Jitter.With(labels).Set(jitterMs)
-		log.Printf("Jitter measured for server %s: %.2f ms", server.Name, jitterMs)
+	if serverID == "" || serverID == "0" {
+		serverList, err := client.FetchServerListContext(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to fetch server list: %v", err)
+		}
+		if len(serverList) == 0 {
+			return fmt.Errorf("no servers available")
+		}
+		server = serverList[0]
 	} else {
-		log.Printf("No jitter data available for server %s", server.Name)
+		server, err = client.FetchServerByIDContext(ctx, serverID)
+		if err != nil {
+			return fmt.Errorf("failed to fetch server: %v", err)
+		}
 	}
 
-	return nil
-}
+	server.Context = client
 
-func RunSpeedTest(server *speedtest.Server) error {
-	log.Printf("Starting speed tests for server %s", server.Name)
+	log.Printf("[%s] %.2fkm %s by %s", server.ID, server.Distance, server.Name, server.Sponsor)
 
-	log.Printf("Starting download test for server %s", server.Name)
-	err := server.DownloadTest()
-	if err != nil {
+	if err := server.PingTestContext(ctx, nil); err != nil {
+		return fmt.Errorf("ping test failed: %v", err)
+	}
+
+	if err := server.DownloadTestContext(ctx); err != nil {
 		return fmt.Errorf("download test failed: %v", err)
 	}
-	log.Printf("Download test completed for server %s. Speed: %.2f Mbps", server.Name, server.DLSpeed.Mbps())
 
-	log.Printf("Starting upload test for server %s", server.Name)
-	err = server.UploadTest()
-	if err != nil {
+	if err := server.UploadTestContext(ctx); err != nil {
 		return fmt.Errorf("upload test failed: %v", err)
 	}
-	log.Printf("Upload test completed for server %s. Speed: %.2f Mbps", server.Name, server.ULSpeed.Mbps())
+
+	if !server.CheckResultValid() {
+		return fmt.Errorf("invalid test results for server %s", server.Name)
+	}
+
+	results := models.TestResults{
+		Latency:       float64(server.Latency.Milliseconds()),
+		Jitter:        float64(server.Jitter.Microseconds()) / 1000.0,
+		DownloadSpeed: server.DLSpeed.Mbps() * 1_000_000,
+		UploadSpeed:   server.ULSpeed.Mbps() * 1_000_000,
+		TestDuration:  server.TestDuration.Total.Seconds(),
+	}
 
 	labels := getLabels(server, config.CLIConfig.Instance)
+	metrics.Latency.With(labels).Set(results.Latency)
+	if server.Jitter > 0 {
+		metrics.Jitter.With(labels).Set(results.Jitter)
+	}
+	metrics.DownloadSpeed.With(labels).Set(results.DownloadSpeed)
+	metrics.UploadSpeed.With(labels).Set(results.UploadSpeed)
+	metrics.TestDuration.With(labels).Set(results.TestDuration)
 
-	metrics.DownloadSpeed.With(labels).Set(server.DLSpeed.Mbps() * 1_000_000)
-	metrics.UploadSpeed.With(labels).Set(server.ULSpeed.Mbps() * 1_000_000)
+	log.Printf("[%s] Download: %.2fMbps, Upload: %.2fMbps, Latency: %.2fms, Jitter: %.2fms, TestDuration: %.2fs",
+		server.ID,
+		results.DownloadSpeed/1_000_000,
+		results.UploadSpeed/1_000_000,
+		results.Latency,
+		results.Jitter,
+		results.TestDuration,
+	)
 
 	return nil
 }
 
 func getLabels(server *speedtest.Server, instance string) prometheus.Labels {
 	labels := prometheus.Labels{
-		"server_id":      server.ID,
-		"server_name":    server.Name,
-		"server_sponsor": server.Sponsor,
+		"server_id":       server.ID,
+		"server_name":     server.Name,
+		"server_sponsor":  server.Sponsor,
+		"server_distance": fmt.Sprintf("%.2fkm", server.Distance),
 	}
 	if instance != "" {
 		labels["instance"] = instance

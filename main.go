@@ -58,6 +58,7 @@ func main() {
 	}
 
 	s.Every(config.CLIConfig.UpdateInterval).Minutes().Do(func() {
+		log.Printf("Starting speed test iteration...")
 		if err := speed.RunTests(serverIDs); err != nil {
 			log.Printf("Tests failed: %v", err)
 		} else {
