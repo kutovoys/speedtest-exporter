@@ -21,5 +21,5 @@ jobs:
         with:
           destination_container_repo: kutovoys/speedtest-exporter
           provider: dockerhub
-          short_description: "A Prometheus exporter for speedtest metrics"
+          short_description: "A Prometheus exporter for speedtest.net metrics with multi-server testing capability"
           readme_file: "README.md"
