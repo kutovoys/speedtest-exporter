@@ -22,7 +22,7 @@ type VersionFlag string
 func (v VersionFlag) Decode(ctx *kong.DecodeContext) error { return nil }
 func (v VersionFlag) IsBool() bool                         { return true }
 func (v VersionFlag) BeforeApply(app *kong.Kong, vars kong.Vars) error {
-	fmt.Println("Speedtest Exporter")
+	fmt.Println("Speedtest Metrics Exporter")
 	fmt.Printf("Version:\t %s\n", vars["version"])
 	fmt.Printf("Commit:\t %s\n", vars["commit"])
 	fmt.Printf("GitHub: https://github.com/kutovoys/speedtest-exporter\n")
