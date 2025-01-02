@@ -22,12 +22,12 @@ func RunTests(serverIDs []string) error {
 		debug.FreeOSMemory()
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
 	for _, id := range serverIDs {
 		id = strings.TrimSpace(id)
-		serverCtx, serverCancel := context.WithTimeout(ctx, 2*time.Minute)
+		serverCtx, serverCancel := context.WithTimeout(ctx, 5*time.Minute)
 
 		if err := runAllTests(serverCtx, id); err != nil {
 			log.Printf("Tests failed for server ID %s: %v", id, err)
